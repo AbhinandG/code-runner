@@ -1,0 +1,6 @@
+Requests==2.31.0
+seaborn
+matplotlib
+streamlit
+jupyter_client
+ipykernel
