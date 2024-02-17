@@ -15,24 +15,22 @@ def generate_code(prompt):
     url = 'https://api.openai.com/v1/chat/completions'
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'
+        'Authorization': ''
     }
-
-
-    csv_files = [file for file in os.listdir('file') if file.endswith('.csv')]
+    csv_files = [file for file in os.listdir('resources/file') if file.endswith('.csv')]
     if csv_files:
-        csvfile_message = "There are the following .csv files present in the file/ directory. Read them using pd.read_csv() and perfomrn subsequent operations on it "
+        csvfile_message = "These are the following .csv files present in the resources/file/ directory. Read them using pd.read_csv() and perfomrn subsequent operations on it "
         csvfile_message += ", ".join(csv_files)
 
         payload = {
                 "model" : "gpt-3.5-turbo",
-                "messages": [{"role": "user", "content": f"You are a helpful AI code generator. Only generate the python code. {csvfile_message}. Read them using pd.read_csv() and perform subsequent operations on them. If the question asks you to generate a plot, save the plot in the /app/data directory. QUESTION  - "+prompt}],
+                "messages": [{"role": "user", "content": f"You are a helpful AI code generator. Only generate the python code.  If the question asks you to generate a plot, save the plot in the /app/resources/data directory. {csvfile_message}. Read them using pd.read_csv() and perform subsequent operations on them. QUESTION  - "+prompt}],
                 "temperature": 0.7
             }
     else:
         payload = {
             "model": "gpt-3.5-turbo",
-            "messages": [{"role": "user", "content": "You are a helpful AI code generator. Only generate the python code. If the question asks you to generate a plot, save the plot in the /app/data directory. QUESTION  - "+prompt}],
+            "messages": [{"role": "user", "content": "You are a helpful AI code generator. Only generate the python code. If the question asks you to generate a plot, save the plot in the /app/resources/data directory. QUESTION  - "+prompt}],
             "temperature": 0.7
         }
 
@@ -84,7 +82,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 
-files_list = [f for f in os.listdir("file") if os.path.isfile(os.path.join("file", f))]
+files_list = [f for f in os.listdir("resources/file") if os.path.isfile(os.path.join("resources/file", f))]
 
 files_to_delete = st.multiselect("Select files to delete", files_list)
 
@@ -104,7 +102,7 @@ uploaded_file = st.file_uploader("Upload CSV", type=['csv'])
 if prompt:
 
     if uploaded_file is not None:
-        file_path = os.path.join("file", uploaded_file.name)
+        file_path = os.path.join("resources/file", uploaded_file.name)
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
         st.success(f"File uploaded successfully: {file_path}")
@@ -123,7 +121,10 @@ if prompt:
     print("Question is: ", generated_code)
     
     with open('generated_code.py', 'w') as f:
-        f.write(response)
+        if generated_code==None:
+            f.write(response)
+        else:
+            f.write(generated_code)
 
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
@@ -138,7 +139,7 @@ if prompt:
                 code_block = False
             else:
                 # Display non-code parts
-                message_placeholder.markdown(chunk)
+                st.code(chunk, language="python")
                 code_block = True
 
             time.sleep(0.05)
@@ -150,26 +151,38 @@ if prompt:
 
         subprocess.run(["docker", "rm", "-f", "code_runner_instance"], capture_output=True, text=True)
 
-        run_result = subprocess.run(["docker", "run", "--name", "code_runner_instance","-v","/Users/abhinandganesh/desktop/code_runner/file:/app/file", "-v", "/Users/abhinandganesh/desktop/code_runner/data:/app/data", "code_runner", "python", "/app/execute_code.py"], capture_output=True, text=True)
+        run_result = subprocess.run(["docker", "run", "--name", "code_runner_instance", "-v", "/Users/abhinandganesh/desktop/code_runner/resources:/app/resources", "code_runner", "python", "/app/execute_code.py"], capture_output=True, text=True)
 
         if run_result.stderr:
             print(run_result.stderr)
         else:
             print("Run result is: ", run_result.stdout)
             result = json.loads(run_result.stdout)
+            st.write(f"Output: {result['output']}")
             print(result)
 
         full_response += f"{result}"
-        image_files = [file for file in os.listdir('data/') if file.endswith(('.jpg', '.jpeg', '.png', '.gif'))]
+        image_files = [file for file in os.listdir('resources/data/') if file.endswith(('.jpg', '.jpeg', '.png', '.gif'))]
 
         if image_files:
             for image_file in image_files:
-                image_path = os.path.join('data/', image_file)
+                image_path = os.path.join('resources/data/', image_file)
                 st.image(image_path)
                 os.remove(image_path)
 
     st.session_state.messages.append({"role": "assistant", "content": full_response})
 
+
+
+
+
+        
+
+    
+
+    
+
+    
 
 
 
