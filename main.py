@@ -45,7 +45,7 @@ def generate_code(prompt):
     url = 'https://api.openai.com/v1/chat/completions'
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer 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'
+        'Authorization': ''
     }
     csv_files = [file for file in os.listdir('resources/file') if file.endswith('.csv')]
     
