@@ -1,50 +1,54 @@
 import sys
 import json
 import traceback
+import socket
 from jupyter_client import KernelManager
+import atexit
 
-def execute_code(code):
-    kc = KernelManager()
-    kc.start_kernel()
-    kc_client = kc.client()
-    kc_client.start_channels()
 
-    kc_client.wait_for_ready(timeout=60)
+def send_code_to_kernel(code):
+    host = '0.0.0.0'
+    port = 5555  # Port used by kernel_initializer.py
 
-    msg_id = kc_client.execute(code)
+    print('Going to connect....')
 
-    outputs=[]
-
-    while True:
-        msg = kc_client.get_iopub_msg()
-        if msg['parent_header'].get('msg_id') == msg_id:
-            msg_type = msg['msg_type']
-            if msg_type == 'stream':
-                outputs.append(msg['content']['text'])
-            elif msg_type == 'display_data':
-                data = msg['content']['data']
-                if 'text/plain' in data:
-                    outputs.append(data['text/plain'])
-            elif msg_type == 'execute_result':
-                data = msg['content']['data']
-                if 'text/plain' in data:
-                    outputs.append(data['text/plain'])
-            elif msg_type == 'status' and msg['content']['execution_state'] == 'idle':
-                break
-    return outputs
-
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        print('trying to connect...')
+        s.connect((host, port))
+        print('connected successfully!')
+        s.sendall(code.encode())
+        response = s.recv(1024)
+        print(f"Received: {response}")
+        return response
 
 
 try:
+    host = '0.0.0.0'  
+    port = 12345  
 
-    with open('generated_code.py', 'r') as f:
-        input_code = f.read()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, port))
+        s.listen()
 
-    output = execute_code(input_code)
-    
-    result = {'output': output}
-    print(json.dumps(result))
+        print(f"Listening on {host}:{port}")
+
+        while True:
+            conn, addr = s.accept()
+            with conn:
+                print('Connected by', addr)
+
+                data = conn.recv(1024)
+
+                print(f"Received: {data}")
+
+                if not data:
+                    print("No data received")
+                    break
+
+                output = send_code_to_kernel(data.decode())
+                print(f"Response from kernel_initializer: {output}")
+                result = {'output': output.decode()}
+                conn.sendall(json.dumps(result).encode())
 except Exception as e:
     error = {'error': str(e), 'traceback': traceback.format_exc()}
     print(json.dumps(error))
-

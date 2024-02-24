@@ -10,27 +10,62 @@ import subprocess
 import streamlit as st
 import time
 import os
+import socket
+
+
+def get_session_state():
+    return st.session_state.setdefault('my_list', [])
+
+my_list = get_session_state()
+
+
+def update_chat_history(question, code, output):
+    my_list.append({"question": question, "code": code, "output": output})
+
+    if len(my_list) > 5:
+        my_list.pop(0)  
+
+    print(f'Chat history now has {len(my_list)} items')
+
+
+
+def send_code_to_container(code):
+    host = 'localhost'  
+    port = 12345  
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((host, port))
+        s.sendall(code.encode())
+        response = s.recv(1024)
+        return json.loads(response.decode())
+
+
 
 def generate_code(prompt):        
     url = 'https://api.openai.com/v1/chat/completions'
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': ''
+        'Authorization': 'Bearer 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'
     }
     csv_files = [file for file in os.listdir('resources/file') if file.endswith('.csv')]
+    
+    transformed_data = [{'Q': entry['question'], 'C': entry['code'], 'O':entry['output']} for entry in my_list]
+    result_string = str(transformed_data).replace("'", "").replace('"', '').replace("{"," ").replace("}"," ")
+
+    
     if csv_files:
         csvfile_message = "These are the following .csv files present in the resources/file/ directory. Read them using pd.read_csv() and perfomrn subsequent operations on it "
         csvfile_message += ", ".join(csv_files)
 
         payload = {
                 "model" : "gpt-3.5-turbo",
-                "messages": [{"role": "user", "content": f"You are a helpful AI code generator. Only generate the python code.  If the question asks you to generate a plot, save the plot in the /app/resources/data directory. {csvfile_message}. Read them using pd.read_csv() and perform subsequent operations on them. QUESTION  - "+prompt}],
+                "messages": [{"role": "user", "content": f"You are a helpful AI code generator. Only generate the python code.  IF A VARIABLE HAS BEEN DECLARED IN THE CHAT HISTORY BFORE, DONT DECLARE IT AGAIN!! If the question asks you to generate a plot, save the plot in the /app/resources/data directory. {csvfile_message}. Read them using pd.read_csv() and perform subsequent operations on them. QUESTION  - "+prompt+f" Chat history: {str(result_string)}"}],
                 "temperature": 0.7
             }
     else:
         payload = {
             "model": "gpt-3.5-turbo",
-            "messages": [{"role": "user", "content": "You are a helpful AI code generator. Only generate the python code. If the question asks you to generate a plot, save the plot in the /app/resources/data directory. QUESTION  - "+prompt}],
+            "messages": [{"role": "user", "content": "You are a helpful AI code generator. Only generate the python code.  IF A VARIABLE HAS BEEN DECLARED IN THE CHAT HISTORY BFORE, DONT DECLARE IT AGAIN!!  If the question asks you to generate a plot, save the plot in the /app/resources/data directory. QUESTION  - "+prompt+f", Chat history: {str(result_string)}"}],
             "temperature": 0.7
         }
 
@@ -143,23 +178,24 @@ if prompt:
                 code_block = True
 
             time.sleep(0.05)
-    
 
-        build_result = subprocess.run(["docker", "build", "-t", "code_runner", "."], capture_output=True, text=True)
-        print(build_result.stdout)
-        print(build_result.stderr)
 
-        subprocess.run(["docker", "rm", "-f", "code_runner_instance"], capture_output=True, text=True)
+        with open("generated_code.py", "r") as f:
+            code_to_execute = f.read()
 
-        run_result = subprocess.run(["docker", "run", "--name", "code_runner_instance", "-v", "/Users/abhinandganesh/desktop/code_runner/resources:/app/resources", "code_runner", "python", "/app/execute_code.py"], capture_output=True, text=True)
+        print("Sending code to container..."+code_to_execute)
 
-        if run_result.stderr:
-            print(run_result.stderr)
+        run_result = send_code_to_container(code_to_execute)
+
+       
+        print("Run result is: ", run_result)
+        st.write(f"Output: {run_result['output']}")
+        result=run_result
+
+        if generated_code==None:
+            update_chat_history(question, response, result['output'])
         else:
-            print("Run result is: ", run_result.stdout)
-            result = json.loads(run_result.stdout)
-            st.write(f"Output: {result['output']}")
-            print(result)
+            update_chat_history(question, generated_code, result['output'])
 
         full_response += f"{result}"
         image_files = [file for file in os.listdir('resources/data/') if file.endswith(('.jpg', '.jpeg', '.png', '.gif'))]
